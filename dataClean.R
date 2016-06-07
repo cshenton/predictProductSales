@@ -1,5 +1,6 @@
 library(reshape)
 library(dplyr)
+library(magrittr)
 
 setwd("/Users/charlesshenton/Documents/LazyLearning/ProductSales")
 
@@ -7,8 +8,10 @@ setwd("/Users/charlesshenton/Documents/LazyLearning/ProductSales")
 # Load Data
 train <- read.csv('TrainingDataset.csv',
 			header = T, stringsAsFactors = F)
+train$isTest <- FALSE
 test <- read.csv('TestDataset.csv',
 			header=TRUE, stringsAsFactors = F)
+test$isTest <- TRUE
 
 # Combine data for Cleaning
 target <- c("Outcome_M1",
@@ -34,7 +37,7 @@ dataLong$month <- dataLong$variable %>%
 	as.character() %>%
 	substring(10, nchar(.)) %>%
 	as.integer()
-dataLong$target <- dataLong$value
+dataLong$sales <- dataLong$value
 dataLong$value <- NULL
 dataLong$variable <- NULL
 
@@ -47,3 +50,19 @@ for(name in hasMissing) {
 	dataLong[is.na(dataLong[name]), name] <- -1
 	dataLong[newname] <- is.na(dataLong[name])*1
 }
+
+# Format data for XGBoost
+
+y <- dataLong$sales %>%
+	extract(!dataLong$isTest) %>%
+	as.matrix()
+dataLong$sales <- NULL
+
+trainMatrix <- dataLong %>%
+	extract(!dataLong$isTest,)
+
+testMatrix <- dataLong %>%
+	extract(dataLong$isTest,)
+
+trainMatrix$isTest <- NULL
+testMatrix$isTest <- NULL
