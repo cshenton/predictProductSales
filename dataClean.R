@@ -1,6 +1,7 @@
 library(reshape)
 library(dplyr)
 library(magrittr)
+library(xgboost)
 
 setwd("/Users/charlesshenton/Documents/LazyLearning/ProductSales")
 
@@ -59,10 +60,47 @@ y <- dataLong$sales %>%
 dataLong$sales <- NULL
 
 trainMatrix <- dataLong %>%
-	extract(!dataLong$isTest,)
+	extract(!dataLong$isTest,) %>%
+	as.matrix()
 
 testMatrix <- dataLong %>%
-	extract(dataLong$isTest,)
+	extract(dataLong$isTest,) %>%
+	as.matrix()
 
-trainMatrix$isTest <- NULL
-testMatrix$isTest <- NULL
+
+# Cross Validated XGBoost to tune parameters
+param <- list("objective" = "reg:linear",
+              "eval_metric" = "rmse",
+              "eta" = 0.008,
+              "num_round" = 100,
+              "max_depth" = 6,
+              "min_child_weight" = 1.14,
+              "colsample_bytree" = 0.5,
+              "early.stop.round" = 10))
+
+nRounds <- 100
+nFolds <- 5
+
+xgCV <- xgb.cv(param = param, data = trainMatrix, label = y, 
+                nfold = nFolds, nrounds = nRounds,
+                missing = NA)
+
+
+# Fit Mixture Model
+
+numModels = 5
+
+y_pred = rep(0, dim(testMatrix)[1])
+
+for (i in 1:1) {
+	xg <- xgboost(param=param, data = trainMatrix, label = y,
+					nrounds=nRounds, missing = NA)
+	y_pred <- y_pred + predict(xg, testMatrix, missing = NA)
+}
+
+y_pred <- y_pred / numModels
+
+
+sub <- data.frame(ID=testIDs, TARGET=p)
+
+write.csv(sub, file="sub6.csv", row.names=FALSE, quote=FALSE)
