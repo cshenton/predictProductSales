@@ -5,7 +5,6 @@ library(xgboost)
 
 setwd("/Users/charlesshenton/Documents/LazyLearning/ProductSales")
 
-
 # Load Data
 train <- read.csv('TrainingDataset.csv',
 			header = T, stringsAsFactors = F)
@@ -86,35 +85,39 @@ xgCV <- xgb.cv(param = param, data = trainMatrix, label = y,
                 missing = NA)
 
 
-# Fit Mixture Model
-numModels = 5
-y_pred = rep(0, dim(testMatrix)[1])
-
-for (i in 1:1) {
-	xg <- xgboost(param=param, data = trainMatrix, label = y,
+# Fit Model
+xg <- xgboost(param=param, data = trainMatrix, label = y,
 					nrounds=nRounds, missing = NA)
-	y_pred <- y_pred + predict(xg, testMatrix, missing = NA)
-}
 
-y_pred <- y_pred / numModels
-months = dataLong %>%
-	extract(dataLong$isTest, "month")
-sub <- data.frame(id=testIDs, month=months, value=y_pred)
-sub$month <- sub$month %>%
-	as.character() %>%
-	paste("Outcome_M",., sep="")
-newsub <- dcast(sub, id ~ month)
-newsub <- newsub %>% select(id, Outcome_M1,
-	Outcome_M2,
-	Outcome_M3,
-	Outcome_M4,
-	Outcome_M5,
-	Outcome_M6,
-	Outcome_M7,
-	Outcome_M8,
-	Outcome_M9,
-	Outcome_M10,
-	Outcome_M11,
-	Outcome_M12)
+# Plot variable importance
+names <- dimnames(trainMatrix)[[2]]
+importance_matrix <- xgb.importance(names, model = xg)
+xgb.plot.importance(importance_matrix[1:20,])
 
-write.csv(newsub, file="sub.csv", row.names=FALSE, quote=FALSE)
+
+
+# y_pred <- y_pred / numModels
+# months = dataLong %>%
+# 	extract(dataLong$isTest, "month")
+# sub <- data.frame(id=testIDs, month=months, value=y_pred)
+# sub$month <- sub$month %>%
+# 	as.character() %>%
+# 	paste("Outcome_M",., sep="")
+# newsub <- dcast(sub, id ~ month)
+# newsub <- newsub %>% select(id, Outcome_M1,
+# 	Outcome_M2,
+# 	Outcome_M3,
+# 	Outcome_M4,
+# 	Outcome_M5,
+# 	Outcome_M6,
+# 	Outcome_M7,
+# 	Outcome_M8,
+# 	Outcome_M9,
+# 	Outcome_M10,
+# 	Outcome_M11,
+# 	Outcome_M12)
+
+# write.csv(newsub, file="sub.csv", row.names=FALSE, quote=FALSE)
+
+# 	y_pred <- y_pred + predict(xg, testMatrix, missing = NA)
+
