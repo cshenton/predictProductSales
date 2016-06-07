@@ -1,4 +1,4 @@
-library(reshape)
+library(reshape2)
 library(dplyr)
 library(magrittr)
 library(xgboost)
@@ -76,7 +76,7 @@ param <- list("objective" = "reg:linear",
               "max_depth" = 6,
               "min_child_weight" = 1.14,
               "colsample_bytree" = 0.5,
-              "early.stop.round" = 10))
+              "early.stop.round" = 10)
 
 nRounds <- 100
 nFolds <- 5
@@ -87,9 +87,7 @@ xgCV <- xgb.cv(param = param, data = trainMatrix, label = y,
 
 
 # Fit Mixture Model
-
 numModels = 5
-
 y_pred = rep(0, dim(testMatrix)[1])
 
 for (i in 1:1) {
@@ -99,8 +97,24 @@ for (i in 1:1) {
 }
 
 y_pred <- y_pred / numModels
+months = dataLong %>%
+	extract(dataLong$isTest, "month")
+sub <- data.frame(id=testIDs, month=months, value=y_pred)
+sub$month <- sub$month %>%
+	as.character() %>%
+	paste("Outcome_M",., sep="")
+newsub <- dcast(sub, id ~ month)
+newsub <- newsub %>% select(id, Outcome_M1,
+	Outcome_M2,
+	Outcome_M3,
+	Outcome_M4,
+	Outcome_M5,
+	Outcome_M6,
+	Outcome_M7,
+	Outcome_M8,
+	Outcome_M9,
+	Outcome_M10,
+	Outcome_M11,
+	Outcome_M12)
 
-
-sub <- data.frame(ID=testIDs, TARGET=p)
-
-write.csv(sub, file="sub6.csv", row.names=FALSE, quote=FALSE)
+write.csv(newsub, file="sub.csv", row.names=FALSE, quote=FALSE)
