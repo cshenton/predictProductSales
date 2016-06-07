@@ -39,9 +39,11 @@ dataLong$value <- NULL
 dataLong$variable <- NULL
 
 # Check for, encode Missing Data
-missing <- sapply(train, function(x) sum(is.na(x)))
+missing <- sapply(dataLong, function(x) sum(is.na(x)))
 hasMissing <- names(missing[missing > 0])
 
 for(name in hasMissing) {
-	t
+	newname <- paste("isNA", name, sep="")
+	dataLong[is.na(dataLong[name]), name] <- -1
+	dataLong[newname] <- is.na(dataLong[name])*1
 }
