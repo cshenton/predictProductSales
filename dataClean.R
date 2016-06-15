@@ -8,10 +8,10 @@ setwd("/Users/charlesshenton/Documents/LazyLearning/ProductSales")
 # Load Data
 train <- read.csv('TrainingDataset.csv',
 			header = T, stringsAsFactors = F)
-train$isTest <- FALSE
+train$isTest <- 0
 test <- read.csv('TestDataset.csv',
 			header=TRUE, stringsAsFactors = F)
-test$isTest <- TRUE
+test$isTest <- 1
 
 # Combine data for Cleaning
 target <- c("Outcome_M1",
@@ -51,8 +51,16 @@ for(name in hasMissing) {
 	dataLong[newname] <- is.na(dataLong[name])*1
 }
 
-# Format data for XGBoost
+# Month as dummies, interact with Quan_4
+dataLong$month <- as.factor(dataLong$month)
+monthMatrix <- model.matrix( ~ month - 1, data=dataLong)
+monthMatrixQ4 <- monthMatrix * dataLong$Quan_4
+dimnames(monthMatrixQ4)[[2]] <- dimnames(monthMatrixQ4)[[2]] %>%
+	paste("Q4", sep="_")
+dataLong <- cbind(dataLong, monthMatrix, monthMatrixQ4)
 
+
+# Format data for XGBoost
 y <- dataLong$sales %>%
 	extract(!dataLong$isTest) %>%
 	as.matrix()
@@ -61,25 +69,28 @@ dataLong$sales <- NULL
 trainMatrix <- dataLong %>%
 	extract(!dataLong$isTest,) %>%
 	as.matrix()
+class(trainMatrix) <- "numeric"
 
 testMatrix <- dataLong %>%
 	extract(dataLong$isTest,) %>%
 	as.matrix()
+class(testMatrix) <- "numeric"
 
 
-# Cross Validated XGBoost to tune parameters
+# Set parameters
 param <- list("objective" = "reg:linear",
               "eval_metric" = "rmse",
-              "eta" = 0.008,
+              "eta" = 0.15,
               "num_round" = 100,
               "max_depth" = 6,
               "min_child_weight" = 1.14,
-              "colsample_bytree" = 0.5,
+              "colsample_bytree" = 0.45,
               "early.stop.round" = 10)
 
 nRounds <- 100
-nFolds <- 5
+nFolds <- 2
 
+# Cross validated XGBoost to tune parameters
 xgCV <- xgb.cv(param = param, data = trainMatrix, label = y, 
                 nfold = nFolds, nrounds = nRounds,
                 missing = NA)
