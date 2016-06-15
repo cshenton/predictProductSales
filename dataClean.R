@@ -1,9 +1,16 @@
 library(reshape2)
-library(dplyr)
 library(magrittr)
 library(xgboost)
+library(caret)
+library(readr)
+library(dplyr)
+library(tidyr)
 
 setwd("/Users/charlesshenton/Documents/LazyLearning/ProductSales")
+
+###
+### DATA CLEANING AND FORMATTING
+###
 
 # Load Data
 train <- read.csv('TrainingDataset.csv',
@@ -51,6 +58,11 @@ for(name in hasMissing) {
 	dataLong[newname] <- is.na(dataLong[name])*1
 }
 
+
+###
+### FEATURE ENGINEERING
+###
+
 # Month as dummies, interact with Quan_4
 dataLong$month <- as.factor(dataLong$month)
 monthMatrix <- model.matrix( ~ month - 1, data=dataLong)
@@ -60,19 +72,20 @@ dimnames(monthMatrixQ4)[[2]] <- dimnames(monthMatrixQ4)[[2]] %>%
 dataLong <- cbind(dataLong, monthMatrix, monthMatrixQ4)
 
 
+###
+### ALGORITHM FIRST PASS 
+###
+
 # Format data for XGBoost
-y <- dataLong$sales %>%
-	extract(!dataLong$isTest) %>%
+y <- dataLong$sales[!dataLong$isTest] %>%
 	as.matrix()
 dataLong$sales <- NULL
 
-trainMatrix <- dataLong %>%
-	extract(!dataLong$isTest,) %>%
+trainMatrix <- dataLong[!dataLong$isTest,] %>%
 	as.matrix()
 class(trainMatrix) <- "numeric"
 
-testMatrix <- dataLong %>%
-	extract(dataLong$isTest,) %>%
+testMatrix <- dataLong[dataLong$isTest] %>%
 	as.matrix()
 class(testMatrix) <- "numeric"
 
@@ -93,8 +106,80 @@ nFolds <- 2
 # Cross validated XGBoost to tune parameters
 xgCV <- xgb.cv(param = param, data = trainMatrix, label = y, 
                 nfold = nFolds, nrounds = nRounds,
-                missing = NA)
+                missing = NA, prediction = TRUE,
+                  showsd = TRUE,
+                  stratified = TRUE,
+                  verbose = TRUE,
+                  print.every.n = 1, 
+                  early.stop.round = 10
+)
 
+# plot the AUC for the training and testing samples
+xgCV$dt %>%
+  select(-contains("std")) %>%
+  mutate(IterationNum = 1:n()) %>%
+  gather(TestOrTrain, AUC, -IterationNum) %>%
+  ggplot(aes(x = IterationNum, y = AUC, group = TestOrTrain, color = TestOrTrain)) + 
+  geom_line() + 
+  theme_bw()
+
+
+###
+### HYPERPARAMETER TUNING
+###
+
+# Set up Grid of hyperparameters 
+xgGrid <- expand.grid(
+	nrounds = 100,
+	eta = seq(0.01, 0.2, 0.01),
+	max_depth = c(2, 4, 6, 8, 10),
+	gamma = 1,
+	colsample_bytree = seq(0.4, 0.5, 0.2),
+	min_child_weight = seq(1.1, 1.2, 0.05)
+)
+
+# pack the training control parameters
+xgTrControl <- trainControl(
+	method = "cv",
+	number = 5,
+	verboseIter = TRUE,
+	returnData = FALSE,
+	returnResamp = "all",
+	allowParallel = TRUE
+)
+
+# train the model for each parameter combination in the grid, 
+#   using CV to evaluate
+xgTrain <- train(
+	x = trainMatrix,
+	y = as.numeric(y),
+	trControl = xgTrControl,
+	tuneGrid = xgGrid,
+	method = "xgbTree",
+	metrid = "RMSE"
+)	
+
+# Scatter plot of the RMSE against max_depth and eta
+# Can choose different hyperparameters.
+ggplot(xgTrain$results, aes(x = as.factor(eta), y = max_depth, size = RMSE, color = RMSE)) + 
+	geom_point() + 
+	theme_bw() + 
+	scale_size_continuous(guide = "none")
+
+# For this search, the minimum RMSE combination was:
+param <- list("objective" = "reg:linear",
+			"eval_metric" = "rmse", 
+			"eta" = 0.11,
+			"max_depth" = 10,
+			"colsample_bytree" = 0.4,
+			"min_child_weight" = 1.15,
+			"early.stop.round" = 10
+)
+
+
+###
+### FINAL MODEL FITTING
+###
 
 # Fit Model
 xg <- xgboost(param=param, data = trainMatrix, label = y,
@@ -106,6 +191,10 @@ importance_matrix <- xgb.importance(names, model = xg)
 xgb.plot.importance(importance_matrix[1:20,])
 
 
+
+### 
+### RESHAPE DATA FOR SUBMISSION
+###
 
 # y_pred <- y_pred / numModels
 # months = dataLong %>%
