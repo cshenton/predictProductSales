@@ -1,4 +1,4 @@
-# Predicting Product Sales with XGBoost
+# Predicting Product Sales with XGBoost in R
 
 This is a straightforward implementation of XGBoost for a regression problem. 
 
