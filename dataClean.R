@@ -34,20 +34,32 @@ target <- c("Outcome_M1",
 			"Outcome_M10",
 			"Outcome_M11",
 			"Outcome_M12")
-test[target] <- NA
 testIDs <- test$id
-test$id <- NULL 			
-data <- rbind(train, test)
+test$id <- NULL
 
-# Reshape to long (id-month)
-dataLong <- melt(data, measure = target)
-dataLong$month <- dataLong$variable %>%
+# Reshape train to long (id-month)
+trainLong <- melt(train, measure = target)
+trainLong$variable <- trainLong$variable %>%
+	as.character()
+trainLong$month <- trainLong$variable %>%
 	as.character() %>%
 	substring(10, nchar(.)) %>%
 	as.integer()
-dataLong$sales <- dataLong$value
-dataLong$value <- NULL
-dataLong$variable <- NULL
+trainLong$sales <- trainLong$value
+trainLong$value <- NULL
+trainLong$variable <- NULL
+
+# Pull out target variable
+y <- trainLong$sales %>%
+	as.matrix()
+trainLong$sales <- NULL
+
+# Reshape test to long 
+testLong = test[rep(seq_len(nrow(test)), each=12),]
+testLong$month = rep(1:12, nrow(test))
+
+# Combine test and train for Cleaning
+dataLong <- rbind(trainLong, testLong)
 
 # Check for, encode Missing Data
 missing <- sapply(dataLong, function(x) sum(is.na(x)))
@@ -71,6 +83,9 @@ monthMatrixQ4 <- monthMatrix * dataLong$Quan_4
 dimnames(monthMatrixQ4)[[2]] <- dimnames(monthMatrixQ4)[[2]] %>%
 	paste("Q4", sep="_")
 dataLong <- cbind(dataLong, monthMatrix, monthMatrixQ4)
+dataLong$month <- dataLong$month %>%
+	as.character() %>%
+	as.numeric()
 
 # Quan variable interactions.
 dataLong$Quan_4_2 = dataLong$Quan_4*dataLong$Quan_2 
@@ -79,21 +94,18 @@ dataLong$Quan_2_11 = dataLong$Quan_2*dataLong$Quan_11
 dataLong$Quan_2_4_11 = dataLong$Quan_2*dataLong$Quan_4*dataLong$Quan_11
 
 
-
 ###
 ### ALGORITHM FIRST PASS 
 ###
 
 # Format data for XGBoost
-y <- dataLong$sales[!dataLong$isTest] %>%
-	as.matrix()
-dataLong$sales <- NULL
+
 
 trainMatrix <- dataLong[!dataLong$isTest,] %>%
 	as.matrix()
 class(trainMatrix) <- "numeric"
 
-testMatrix <- dataLong[dataLong$isTest] %>%
+testMatrix <- dataLong[dataLong$isTest,] %>%
 	as.matrix()
 class(testMatrix) <- "numeric"
 
@@ -107,7 +119,6 @@ param <- list("objective" = "reg:linear",
               "min_child_weight" = 1.14,
               "colsample_bytree" = 0.45,
               "early.stop.round" = 10)
-
 nRounds <- 100
 nFolds <- 2
 
@@ -115,11 +126,11 @@ nFolds <- 2
 xgCV <- xgb.cv(param = param, data = trainMatrix, label = y, 
                 nfold = nFolds, nrounds = nRounds,
                 missing = NA, prediction = TRUE,
-                  showsd = TRUE,
-                  stratified = TRUE,
-                  verbose = TRUE,
-                  print.every.n = 1, 
-                  early.stop.round = 10
+                showsd = TRUE,
+                stratified = TRUE,
+                verbose = TRUE,
+                print.every.n = 1, 
+                early.stop.round = 10,
 )
 
 # plot the RMSE for the training and testing samples
@@ -157,7 +168,7 @@ xgTrControl <- trainControl(
 )
 
 # train the model for each parameter combination in the grid, 
-#   using CV to evaluate
+# using CV to evaluate
 xgTrain <- train(
 	x = trainMatrix,
 	y = as.numeric(y),
@@ -203,9 +214,8 @@ xgb.plot.importance(importance_matrix[1:20,])
 ### RESHAPE DATA FOR SUBMISSION
 ##
 
-y_pred <- 
-months = dataLong %>%
-	extract(dataLong$isTest, "month")
+y_pred <- predict(xg, testMatrix, missing = NA)
+months = dataLong[dataLong$isTest, "month"]
 sub <- data.frame(id=testIDs, month=months, value=y_pred)
 sub$month <- sub$month %>%
 	as.character() %>%
