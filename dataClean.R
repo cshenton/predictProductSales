@@ -8,6 +8,7 @@ library(tidyr)
 
 setwd("/Users/charlesshenton/Documents/LazyLearning/ProductSales")
 
+
 ###
 ### DATA CLEANING AND FORMATTING
 ###
@@ -71,6 +72,13 @@ dimnames(monthMatrixQ4)[[2]] <- dimnames(monthMatrixQ4)[[2]] %>%
 	paste("Q4", sep="_")
 dataLong <- cbind(dataLong, monthMatrix, monthMatrixQ4)
 
+# Quan variable interactions.
+dataLong$Quan_4_2 = dataLong$Quan_4*dataLong$Quan_2 
+dataLong$Quan_4_11 = dataLong$Quan_4*dataLong$Quan_11
+dataLong$Quan_2_11 = dataLong$Quan_2*dataLong$Quan_11
+dataLong$Quan_2_4_11 = dataLong$Quan_2*dataLong$Quan_4*dataLong$Quan_11
+
+
 
 ###
 ### ALGORITHM FIRST PASS 
@@ -114,12 +122,12 @@ xgCV <- xgb.cv(param = param, data = trainMatrix, label = y,
                   early.stop.round = 10
 )
 
-# plot the AUC for the training and testing samples
+# plot the RMSE for the training and testing samples
 xgCV$dt %>%
   select(-contains("std")) %>%
   mutate(IterationNum = 1:n()) %>%
-  gather(TestOrTrain, AUC, -IterationNum) %>%
-  ggplot(aes(x = IterationNum, y = AUC, group = TestOrTrain, color = TestOrTrain)) + 
+  gather(TestOrTrain, RMSE, -IterationNum) %>%
+  ggplot(aes(x = IterationNum, y = RMSE, group = TestOrTrain, color = TestOrTrain)) + 
   geom_line() + 
   theme_bw()
 
@@ -191,33 +199,32 @@ importance_matrix <- xgb.importance(names, model = xg)
 xgb.plot.importance(importance_matrix[1:20,])
 
 
-
 ### 
 ### RESHAPE DATA FOR SUBMISSION
-###
+##
 
-# y_pred <- y_pred / numModels
-# months = dataLong %>%
-# 	extract(dataLong$isTest, "month")
-# sub <- data.frame(id=testIDs, month=months, value=y_pred)
-# sub$month <- sub$month %>%
-# 	as.character() %>%
-# 	paste("Outcome_M",., sep="")
-# newsub <- dcast(sub, id ~ month)
-# newsub <- newsub %>% select(id, Outcome_M1,
-# 	Outcome_M2,
-# 	Outcome_M3,
-# 	Outcome_M4,
-# 	Outcome_M5,
-# 	Outcome_M6,
-# 	Outcome_M7,
-# 	Outcome_M8,
-# 	Outcome_M9,
-# 	Outcome_M10,
-# 	Outcome_M11,
-# 	Outcome_M12)
+y_pred <- 
+months = dataLong %>%
+	extract(dataLong$isTest, "month")
+sub <- data.frame(id=testIDs, month=months, value=y_pred)
+sub$month <- sub$month %>%
+	as.character() %>%
+	paste("Outcome_M",., sep="")
+newsub <- dcast(sub, id ~ month)
+newsub <- newsub %>% select(id, Outcome_M1,
+	Outcome_M2,
+	Outcome_M3,
+	Outcome_M4,
+	Outcome_M5,
+	Outcome_M6,
+	Outcome_M7,
+	Outcome_M8,
+	Outcome_M9,
+	Outcome_M10,
+	Outcome_M11,
+	Outcome_M12)
 
-# write.csv(newsub, file="sub.csv", row.names=FALSE, quote=FALSE)
+write.csv(newsub, file="sub.csv", row.names=FALSE, quote=FALSE)
 
-# 	y_pred <- y_pred + predict(xg, testMatrix, missing = NA)
+	y_pred <- y_pred + predict(xg, testMatrix, missing = NA)
 
