@@ -99,13 +99,14 @@ dataLong$Quan_2_4_11 = dataLong$Quan_2*dataLong$Quan_4*dataLong$Quan_11
 ###
 
 # Format data for XGBoost
-
-
-trainMatrix <- dataLong[!dataLong$isTest,] %>%
+trainMatrix <- dataLong[dataLong$isTest==0,] %>%
 	as.matrix()
 class(trainMatrix) <- "numeric"
+trainMatrix <- trainMatrix[!is.na(y),]
 
-testMatrix <- dataLong[dataLong$isTest,] %>%
+y <- y[!is.na(y)]
+
+testMatrix <- dataLong[dataLong$isTest==1,] %>%
 	as.matrix()
 class(testMatrix) <- "numeric"
 
@@ -215,12 +216,15 @@ xgb.plot.importance(importance_matrix[1:20,])
 ##
 
 y_pred <- predict(xg, testMatrix, missing = NA)
-months = dataLong[dataLong$isTest, "month"]
-sub <- data.frame(id=testIDs, month=months, value=y_pred)
+months = dataLong$month[dataLong$isTest==1]
+sub <- data.frame(id=rep(testIDs, each=12), month=months, value=y_pred)
 sub$month <- sub$month %>%
 	as.character() %>%
 	paste("Outcome_M",., sep="")
-newsub <- dcast(sub, id ~ month)
+newsub <- dcast(data = sub,
+	formula = id ~ month,
+	fun.aggregate = sum,
+	value.var = "value")
 newsub <- newsub %>% select(id, Outcome_M1,
 	Outcome_M2,
 	Outcome_M3,
@@ -235,6 +239,4 @@ newsub <- newsub %>% select(id, Outcome_M1,
 	Outcome_M12)
 
 write.csv(newsub, file="sub.csv", row.names=FALSE, quote=FALSE)
-
-	y_pred <- y_pred + predict(xg, testMatrix, missing = NA)
 
